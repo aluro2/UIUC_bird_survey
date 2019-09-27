@@ -1,0 +1,130 @@
+---
+title: GEEB Bird Window Strike Survey Fall 2019
+author: Alec Luro
+date: 9/27/2019
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_depth: 3
+    toc_float: true
+  word_document: default
+  pdf_document: default
+---
+
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width = 12, fig.height = 12, fig.path = 'Figs/', fig.align = "center",
+                      echo = TRUE, warning = FALSE, tidy = F)
+```
+
+```{r load packages and import data, echo=FALSE, message=FALSE}
+
+library(tidyverse)
+library(googlesheets)
+library(janitor)
+library(ggthemes)
+library(extrafont)
+
+
+bird_data_url <-
+  gs_url("https://docs.google.com/spreadsheets/d/1M2hSw0TBxRry3Z7FA4ttU3QAvnoWHhb2MKV7J4tgUbQ/edit#gid=0")
+
+
+bird_data <-
+  bird_data_url %>% 
+  gs_read(., ws = 1) %>% 
+  clean_names() %>% 
+  mutate(date_mm_dd_yyyy = lubridate::mdy(date_mm_dd_yyyy))
+
+
+```
+
+## Birds found by Date
+
+```{r birds_by_date, echo = FALSE, message = FALSE}
+bird_data %>%
+  filter(any_birds_found_on_route_shift == "Yes",
+         !species == "NA",
+         !species == "Unidentifiable") %>% 
+  select(species, date_mm_dd_yyyy) %>% 
+  table(.) %>% 
+  as_tibble(.) %>% 
+  mutate(species = str_extract(species, "[^_]+")) %>%
+  arrange(., order(date_mm_dd_yyyy), species) %>% 
+  mutate(species = factor(species, levels = unique(species))) %>%
+  select(date_mm_dd_yyyy, n) %>% 
+  group_by(date_mm_dd_yyyy) %>% 
+  summarise(n_birds_found = sum(n)) %>%
+  ggplot(., aes(x = date_mm_dd_yyyy, y = n_birds_found, group = 1)) + 
+  geom_area(color = "blue", fill = "blue", alpha = 0.5) +
+  xlab("Date") +
+  ylab("Number of Birds Found") +
+  ylim(0,20) + 
+  theme_fivethirtyeight() + 
+  theme(#panel.background = element_rect(fill = "black",
+    #colour = "black",
+    #size = 0.5, linetype = "solid"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 24),
+    axis.title = element_text(size = 36, face = "bold"),
+    text = element_text(family = "Calibri", size = 20),
+    legend.position = "none",
+    panel.grid.major.x = element_blank())
+```
+
+## Birds found by Species
+
+```{r birds_by_species, echo = FALSE, message = FALSE}
+  bird_data %>%
+    filter(any_birds_found_on_route_shift == "Yes",
+           !species == "NA",
+           !species == "Unidentifiable") %>% 
+    select(species) %>% 
+    table(.) %>% 
+    as_tibble(.) %>% 
+    rename(Species = ".",
+           "Number of Birds Found" = n ) %>%
+    mutate(Species = str_extract(Species, "[^_]+")) %>%
+    arrange(., desc(`Number of Birds Found`), Species) %>% 
+    mutate(Species = factor(Species, levels = unique(Species))) %>% 
+  ggplot(., aes(x = Species, y = `Number of Birds Found`)) + 
+  geom_linerange(
+    aes(x = Species, ymin = 0, ymax = `Number of Birds Found`), 
+    color = "darkgray",
+    size = 1.5) +
+  geom_point(aes(color = Species), size = 7 ) +
+  ylim(0,15) +
+  theme_fivethirtyeight() + 
+  theme(#panel.background = element_rect(fill = "black",
+                                        #colour = "black",
+                                       #size = 0.5, linetype = "solid"),
+        axis.text.x = element_text(angle = 60, hjust = 1, size = 24),
+        axis.title = element_text(size = 36, face = "bold"),
+        text = element_text(family = "Calibri", size = 20),
+        legend.position = "none",
+        panel.grid.major.x = element_blank())
+```
+
+## Birds Found by Location
+
+```{r leaflet_interactive_map, echo=FALSE, message=FALSE}
+
+
+library(htmltools)
+library(leaflet)
+
+building_locations <- 
+  read_csv("Data/campus_building_locations.csv") 
+
+
+
+bird_data %>% 
+  filter(any_birds_found_on_route_shift == "Yes") %>% 
+  left_join(., building_locations, by = "building_name") %>% 
+  select(species, lat, lon) %>%
+  leaflet() %>%
+  addTiles() %>%
+  addMarkers(label = ~htmlEscape(species), clusterOptions = markerClusterOptions())
+
+
+```
